@@ -2,6 +2,7 @@
 use libc::dlopen;
 use tch;
 
+mod dataset;
 mod tokenizer;
 
 fn main() {
@@ -16,5 +17,6 @@ fn main() {
     assert!(tch::Cuda::is_available());
     // Load tokenizer to ensure it compiles
     let _tokenizer = tokenizer::Tokenizer::new();
+    let _batches = dataset::DataSet::new("data/".to_string(), _tokenizer);
     println!("Hello, world!");
 }

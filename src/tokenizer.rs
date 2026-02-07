@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+#[derive(Debug, Clone)]
 pub struct Tokenizer {}
 
 pub const PAD_TOKEN: u8 = 128;
