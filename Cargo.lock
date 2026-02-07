@@ -170,6 +170,7 @@ dependencies = [
 name = "domz-llm"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "libc",
  "tch",
 ]

@@ -1,7 +1,12 @@
+#[allow(unused_imports)]
 use libc::dlopen;
 use tch;
 
+mod tokenizer;
+
 fn main() {
+    // INITIALIZATION TESTS
+    // Kludge to load CUDA since libtorch seems to load it lazily, causing is_available to return false.
     unsafe {
         libc::dlopen(
             c"/usr/local/lib/libtorch/lib/libtorch_cuda.so".as_ptr(),
@@ -9,5 +14,7 @@ fn main() {
         );
     }
     assert!(tch::Cuda::is_available());
+    // Load tokenizer to ensure it compiles
+    let _tokenizer = tokenizer::Tokenizer::new();
     println!("Hello, world!");
 }
