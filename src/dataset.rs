@@ -2,10 +2,7 @@ use rand;
 use tch::Tensor;
 use walkdir;
 
-use crate::tokenizer;
-
-const CONTEXT_LENGTH: usize = 512;
-const TRAIN_VALIDATION_SPLIT: f32 = 0.9;
+use crate::{constants::{TRAIN_VALIDATION_SPLIT, EOS_TOKEN, CONTEXT_LENGTH, PAD_TOKEN}, tokenizer};
 
 #[derive(Debug, Clone)]
 pub struct DataSet {
@@ -72,9 +69,9 @@ impl Iterator for DataSubset {
         if let Some(batch_file) = self.paths.pop() {
             let text = std::fs::read_to_string(batch_file).expect("Failed to read file");
             let mut tokens = self.tokenizer.encode(&text).expect("Failed to encode text");
-            tokens.push(tokenizer::EOS_TOKEN); // Append EOS token
+            tokens.push(EOS_TOKEN); // Append EOS token
             let chunks: Vec<Vec<u8>> = tokens
-                .chunks(CONTEXT_LENGTH)
+                .chunks(CONTEXT_LENGTH as usize)
                 .map(|token_chunk| Vec::from(token_chunk))
                 .collect();
             let mut batch: Vec<(Tensor, Tensor)> = Vec::new();
@@ -84,8 +81,8 @@ impl Iterator for DataSubset {
                 let mut target_vec = chunk[1..].to_vec();
                 if i == final_chunk {
                     // Pad the last chunk
-                    input_vec.resize(CONTEXT_LENGTH - 1, tokenizer::PAD_TOKEN);
-                    target_vec.resize(CONTEXT_LENGTH - 1, tokenizer::PAD_TOKEN);
+                    input_vec.resize(CONTEXT_LENGTH as usize - 1, PAD_TOKEN);
+                    target_vec.resize(CONTEXT_LENGTH as usize - 1, PAD_TOKEN);
                 }
                 if input_vec.len() < 2 {
                     continue; // Skip chunks that are too small

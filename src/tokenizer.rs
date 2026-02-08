@@ -1,10 +1,8 @@
 use anyhow::Result;
+use crate::constants;
 
 #[derive(Debug, Clone)]
 pub struct Tokenizer {}
-
-pub const PAD_TOKEN: u8 = 128;
-pub const EOS_TOKEN: u8 = 129;
 
 impl Tokenizer {
     pub fn new() -> Self {
@@ -30,8 +28,8 @@ impl Tokenizer {
                 0..=127 => {
                     text.push(token as u8 as char);
                 }
-                PAD_TOKEN => {}
-                EOS_TOKEN => {
+                constants::PAD_TOKEN => {}
+                constants::EOS_TOKEN => {
                     break;
                 }
                 _ => return Err(anyhow::anyhow!("Invalid token found: {}", token)),
@@ -44,6 +42,8 @@ impl Tokenizer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::{EOS_TOKEN, PAD_TOKEN};
+    
     #[test]
     fn test_tokenizer() -> Result<()> {
         let tokenizer = Tokenizer::new();

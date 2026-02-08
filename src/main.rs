@@ -2,8 +2,10 @@
 use libc::dlopen;
 use tch;
 
+mod constants;
 mod dataset;
 mod tokenizer;
+mod model;
 
 fn main() {
     // INITIALIZATION TESTS
