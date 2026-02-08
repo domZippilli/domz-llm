@@ -6,6 +6,7 @@ mod constants;
 mod dataset;
 mod tokenizer;
 mod model;
+mod train;
 
 fn main() {
     // INITIALIZATION TESTS
