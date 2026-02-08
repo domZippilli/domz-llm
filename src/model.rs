@@ -1,7 +1,7 @@
 use std::{f64, i64};
 
 use crate::constants::{
-    CONTEXT_LENGTH, EMBEDDING_DIM, FFN_HIDDEN_DIM, HEADS, MAX_SEQUENCE_LENGTH, VOCAB_SIZE,
+    CONTEXT_LENGTH, EMBEDDING_DIM, FFN_HIDDEN_DIM, HEADS, MAX_SEQUENCE_LENGTH, LAYERS, VOCAB_SIZE
 };
 use tch::{
     Kind::{Bool, Float},
@@ -129,7 +129,7 @@ impl MultiHeadAttention {
     pub fn new(vs: &Path) -> MultiHeadAttention {
         let mut heads = Vec::with_capacity(HEADS as usize);
         for i in 0..(HEADS as usize) {
-            heads.push(SingleHeadAttention::new(&(vs / i.to_string())));
+            heads.push(SingleHeadAttention::new(&(vs / format!("head_{}", i))));
         }
         let output_projection = linear(
             vs / "output",
@@ -197,13 +197,11 @@ impl Transformer {
     pub fn new(vs: &Path) -> Transformer {
         let input_layernorm = layer_norm(
             vs / "input_layernorm",
-            // `[batch_size, seq_len, EMBEDDING_DIM]`
             vec![EMBEDDING_DIM],
             Default::default(),
         );
         let attended_layernorm = layer_norm(
             vs / "attended_layernorm",
-            // `[batch_size, seq_len, EMBEDDING_DIM]`
             vec![EMBEDDING_DIM],
             Default::default(),
         );
@@ -227,6 +225,38 @@ impl Transformer {
         let normalized_attended = attended.apply(&self.attended_layernorm);
         let perceptron = self.ffn.forward(&normalized_attended);
         attended + perceptron // "residual connection" 2
+    }
+}
+
+pub struct MiniGPT {
+    embeddings: Embeddings,
+    layers: Vec<Transformer>,
+    final_layernorm: LayerNorm,
+    output_head: Linear,
+}
+
+impl MiniGPT {
+    pub fn new (vs: &Path) -> MiniGPT {
+        let embeddings = Embeddings::new(&(vs / "embeddings"));
+        let mut layers = Vec::with_capacity(LAYERS);
+        for i in 0..(LAYERS) {
+            layers.push(Transformer::new(&(vs / format!("transformer_{}", i))));
+        };
+        let final_layernorm = layer_norm(
+            vs / "final_layernorm",
+            vec![EMBEDDING_DIM],
+            Default::default(),
+        );
+        let output_head = linear(vs / "output", EMBEDDING_DIM, VOCAB_SIZE, Default::default());
+        MiniGPT { embeddings, layers, final_layernorm, output_head }
+    }
+
+    pub fn forward(&self, input: &Tensor) -> Tensor {
+        let mut embeddings = self.embeddings.forward(input);
+        for transformer in &self.layers {
+            embeddings = transformer.forward(&embeddings);
+        };
+        embeddings.apply(&self.final_layernorm).apply(&self.output_head)
     }
 }
 
@@ -513,6 +543,82 @@ mod tests {
         assert!(
             f64::try_from(&diff).unwrap() < 5.0,
             "With fresh weights, residual connections should keep output near input"
+        );
+    }
+
+    // -- MiniGPT full model tests --
+
+    #[test]
+    fn test_minigpt_output_shape() {
+        let vs = nn::VarStore::new(Device::Cpu);
+        let model = MiniGPT::new(&vs.root());
+        // Batch of 2, sequence of 8 token IDs
+        let input = Tensor::from_slice2(&[
+            &[72i64, 101, 108, 108, 111, 32, 87, 111],
+            &[100, 101, 102, 32, 102, 111, 111, 40],
+        ]);
+        let output = model.forward(&input);
+        // Output should be [batch, seq_len, VOCAB_SIZE] — logits over vocabulary
+        assert_eq!(output.size(), &[2, 8, VOCAB_SIZE]);
+    }
+
+    #[test]
+    fn test_minigpt_single_token() {
+        let vs = nn::VarStore::new(Device::Cpu);
+        let model = MiniGPT::new(&vs.root());
+        let input = Tensor::from_slice2(&[&[65i64]]);
+        let output = model.forward(&input);
+        assert_eq!(output.size(), &[1, 1, VOCAB_SIZE]);
+    }
+
+    #[test]
+    fn test_minigpt_causal_masking() {
+        let vs = nn::VarStore::new(Device::Cpu);
+        let model = MiniGPT::new(&vs.root());
+
+        let input_a = Tensor::from_slice2(&[&[72i64, 101, 108, 108]]);
+        let output_a = model.forward(&input_a);
+
+        // Change the last token only
+        let input_b = Tensor::from_slice2(&[&[72i64, 101, 108, 40]]);
+        let output_b = model.forward(&input_b);
+
+        // Positions 0, 1, 2 should be identical
+        for pos in 0..3 {
+            let a = output_a.get(0).get(pos);
+            let b = output_b.get(0).get(pos);
+            let diff = (&a - &b).abs().sum(Float);
+            assert!(
+                f64::try_from(&diff).unwrap() < 1e-4,
+                "Position {} changed when only a future token was modified",
+                pos
+            );
+        }
+
+        // Position 3 should differ
+        let a3 = output_a.get(0).get(3);
+        let b3 = output_b.get(0).get(3);
+        let diff3 = (&a3 - &b3).abs().sum(Float);
+        assert!(
+            f64::try_from(&diff3).unwrap() > 1e-5,
+            "Position 3 should have changed"
+        );
+    }
+
+    #[test]
+    fn test_minigpt_logits_are_not_uniform() {
+        // Even with random weights, the model should produce non-uniform
+        // logits across the vocabulary (not all the same value)
+        let vs = nn::VarStore::new(Device::Cpu);
+        let model = MiniGPT::new(&vs.root());
+        let input = Tensor::from_slice2(&[&[72i64, 101, 108]]);
+        let output = model.forward(&input);
+        // Check that logits at position 0 have some variance
+        let logits = output.get(0).get(0); // [VOCAB_SIZE]
+        let std_dev = f64::try_from(&logits.std(false)).unwrap();
+        assert!(
+            std_dev > 1e-6,
+            "Logits should not be uniform across vocabulary"
         );
     }
 }

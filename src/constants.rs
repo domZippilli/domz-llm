@@ -10,6 +10,8 @@ pub const MAX_SEQUENCE_LENGTH: i64 = EMBEDDING_DIM - 1;
 pub const HEADS: i64 = 8;
 /// The "hidden" dimension for feed-forward network
 pub const FFN_HIDDEN_DIM: i64 = EMBEDDING_DIM * 4;
+/// Number of layers
+pub const LAYERS: usize = 8;
 
 /// Special token representing padding.
 pub const PAD_TOKEN: u8 = 128;
