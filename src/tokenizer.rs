@@ -11,12 +11,17 @@ impl Tokenizer {
 
     pub fn encode(&self, text: &str) -> Result<Vec<u8>> {
         let mut tokens = Vec::with_capacity(text.len());
+        let mut skipped = 0;
         for c in text.chars() {
             // Only ASCII characters are supported in this simple tokenizer
             if !c.is_ascii() {
-                return Err(anyhow::anyhow!("Non-ASCII character found: {}", c));
+                skipped += 1;
+                continue;
             }
             tokens.push(c as u8);
+        }
+        if skipped > 0 {
+            eprintln!("warning: skipped {} tokens", skipped)
         }
         Ok(tokens)
     }

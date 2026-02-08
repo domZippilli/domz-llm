@@ -9,7 +9,7 @@ mod model;
 mod train;
 
 fn main() {
-    // INITIALIZATION TESTS
+    // INITIALIZATION
     // Kludge to load CUDA since libtorch seems to load it lazily, causing is_available to return false.
     unsafe {
         libc::dlopen(
@@ -19,7 +19,8 @@ fn main() {
     }
     assert!(tch::Cuda::is_available());
     // Load tokenizer to ensure it compiles
-    let _tokenizer = tokenizer::Tokenizer::new();
-    let _batches = dataset::DataSet::new("data/".to_string(), _tokenizer);
-    println!("Hello, world!");
+    let tokenizer = tokenizer::Tokenizer::new();
+    let dataset = dataset::DataSet::new("data/".to_string(), tokenizer);
+    let mut trainer = train::MiniGPTTrainer::new(tch::Device::Cuda(0), dataset, Some(300));
+    trainer.train(5);
 }

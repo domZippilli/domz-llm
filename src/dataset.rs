@@ -35,6 +35,7 @@ impl DataSet {
             .into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().is_file())
+            .filter(|e| e.path().extension().map_or(false, |ext| ext == "py"))
             .map(|e| e.path().to_string_lossy().to_string())
             .collect()
     }
@@ -67,7 +68,8 @@ impl Iterator for DataSubset {
     fn next(&mut self) -> Option<Self::Item> {
         // Load the next batch of data from the remaining dataset files.
         if let Some(batch_file) = self.paths.pop() {
-            let text = std::fs::read_to_string(batch_file).expect("Failed to read file");
+            let bytes = std::fs::read(&batch_file).expect("Failed to read file");
+            let text = String::from_utf8_lossy(&bytes);
             let mut tokens = self.tokenizer.encode(&text).expect("Failed to encode text");
             tokens.push(EOS_TOKEN); // Append EOS token
             let chunks: Vec<Vec<u8>> = tokens
