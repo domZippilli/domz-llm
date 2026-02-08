@@ -8,6 +8,8 @@ pub const EMBEDDING_DIM: i64 = CONTEXT_LENGTH as i64;
 pub const MAX_SEQUENCE_LENGTH: i64 = EMBEDDING_DIM - 1;
 /// The number of "heads" (attention passes)
 pub const HEADS: i64 = 8;
+/// The "hidden" dimension for feed-forward network
+pub const FFN_HIDDEN_DIM: i64 = EMBEDDING_DIM * 4;
 
 /// Special token representing padding.
 pub const PAD_TOKEN: u8 = 128;

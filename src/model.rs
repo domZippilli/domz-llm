@@ -1,6 +1,6 @@
 use std::{f64, i64};
 
-use crate::constants::{EMBEDDING_DIM, HEADS, MAX_SEQUENCE_LENGTH, VOCAB_SIZE};
+use crate::constants::{EMBEDDING_DIM, FFN_HIDDEN_DIM, HEADS, MAX_SEQUENCE_LENGTH, VOCAB_SIZE};
 use tch::{
     Kind::{Bool, Float},
     Tensor,
@@ -150,6 +150,39 @@ impl MultiHeadAttention {
     }
 }
 
+struct FeedForward {
+    project_up: Linear,
+    project_down: Linear,
+}
+
+impl FeedForward {
+    pub fn new(vs: &Path) -> FeedForward {
+        FeedForward {
+            project_up: linear(vs / "up", EMBEDDING_DIM, FFN_HIDDEN_DIM, Default::default()),
+            project_down: linear(
+                vs / "down",
+                FFN_HIDDEN_DIM,
+                EMBEDDING_DIM,
+                Default::default(),
+            ),
+        }
+    }
+
+    //   Attention lets each token gather information from other tokens. But
+    //   after gathering, each token needs to process that information
+    //   individually. That's what the "Multi-layer Perceptron"(!) or MLP does —
+    //   it's applied to each position independently (same weights, no
+    //   cross-position interaction).
+    pub fn forward(&self, input: &Tensor) -> Tensor {
+        // increase the dimensions for more "scratch space"
+        let expanded_embeddings = input.apply(&self.project_up);
+        // run Gaussian error linear units function
+        // TODO(domz): Learn the "why" of GELU
+        let gelu_activated = expanded_embeddings.gelu("none");
+        // Shrink the tensor back down
+        gelu_activated.apply(&self.project_down)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -315,4 +348,63 @@ mod tests {
             );
         }
     }
+
+    // -- FeedForward tests --
+
+    #[test]
+    fn test_ffn_output_shape() {
+        let vs = nn::VarStore::new(Device::Cpu);
+        let ffn = FeedForward::new(&vs.root());
+        let input = random_embed_input(2, 8);
+        let output = ffn.forward(&input);
+        // FFN should preserve shape: [batch, seq_len, EMBEDDING_DIM]
+        assert_eq!(output.size(), &[2, 8, EMBEDDING_DIM]);
+    }
+
+    #[test]
+    fn test_ffn_single_token() {
+        let vs = nn::VarStore::new(Device::Cpu);
+        let ffn = FeedForward::new(&vs.root());
+        let input = random_embed_input(1, 1);
+        let output = ffn.forward(&input);
+        assert_eq!(output.size(), &[1, 1, EMBEDDING_DIM]);
+    }
+
+    #[test]
+    fn test_ffn_position_independence() {
+        // FFN applies independently per position — changing one position
+        // should not affect any other position's output
+        let vs = nn::VarStore::new(Device::Cpu);
+        let ffn = FeedForward::new(&vs.root());
+
+        let input_a = random_embed_input(1, 4);
+        let output_a = ffn.forward(&input_a);
+
+        let input_b = input_a.copy();
+        let noise = Tensor::randn(&[1, 1, EMBEDDING_DIM], (Float, Device::Cpu));
+        input_b.narrow(1, 2, 1).copy_(&noise);
+        let output_b = ffn.forward(&input_b);
+
+        // Positions 0, 1, 3 should be identical (only position 2 changed)
+        for pos in [0, 1, 3] {
+            let a = output_a.get(0).get(pos);
+            let b = output_b.get(0).get(pos);
+            let diff = (&a - &b).abs().sum(Float);
+            assert!(
+                f64::try_from(&diff).unwrap() < 1e-5,
+                "Position {} changed when only position 2 was modified",
+                pos
+            );
+        }
+
+        // Position 2 should be different
+        let a2 = output_a.get(0).get(2);
+        let b2 = output_b.get(0).get(2);
+        let diff2 = (&a2 - &b2).abs().sum(Float);
+        assert!(
+            f64::try_from(&diff2).unwrap() > 1e-5,
+            "Position 2 should have changed"
+        );
+    }
+
 }
