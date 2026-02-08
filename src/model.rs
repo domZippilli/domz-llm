@@ -1,10 +1,12 @@
 use std::{f64, i64};
 
-use crate::constants::{EMBEDDING_DIM, FFN_HIDDEN_DIM, HEADS, MAX_SEQUENCE_LENGTH, VOCAB_SIZE};
+use crate::constants::{
+    CONTEXT_LENGTH, EMBEDDING_DIM, FFN_HIDDEN_DIM, HEADS, MAX_SEQUENCE_LENGTH, VOCAB_SIZE,
+};
 use tch::{
     Kind::{Bool, Float},
     Tensor,
-    nn::{Embedding, Linear, Path, embedding, linear},
+    nn::{Embedding, LayerNorm, Linear, Path, embedding, layer_norm, linear},
 };
 
 struct Embeddings {
@@ -181,6 +183,50 @@ impl FeedForward {
         let gelu_activated = expanded_embeddings.gelu("none");
         // Shrink the tensor back down
         gelu_activated.apply(&self.project_down)
+    }
+}
+
+struct Transformer {
+    input_layernorm: LayerNorm,
+    attended_layernorm: LayerNorm,
+    attention_layer: MultiHeadAttention,
+    ffn: FeedForward,
+}
+
+impl Transformer {
+    pub fn new(vs: &Path) -> Transformer {
+        let input_layernorm = layer_norm(
+            vs / "input_layernorm",
+            // `[batch_size, seq_len, EMBEDDING_DIM]`
+            vec![EMBEDDING_DIM],
+            Default::default(),
+        );
+        let attended_layernorm = layer_norm(
+            vs / "attended_layernorm",
+            // `[batch_size, seq_len, EMBEDDING_DIM]`
+            vec![EMBEDDING_DIM],
+            Default::default(),
+        );
+        let attention_layer = MultiHeadAttention::new(&(vs / "attention"));
+        let ffn = FeedForward::new(&(vs / "ffn"));
+        Transformer {
+            input_layernorm,
+            attended_layernorm,
+            attention_layer,
+            ffn,
+        }
+    }
+
+    pub fn forward(&self, input: &Tensor) -> Tensor {
+        // normalize input and build the attention layer
+        let normalized_input = input.apply(&self.input_layernorm);
+        let attention = self.attention_layer.forward(&normalized_input);
+        let attended = input + attention; // "residual connection" 1
+
+        // normalize attended and backprop through FFN
+        let normalized_attended = attended.apply(&self.attended_layernorm);
+        let perceptron = self.ffn.forward(&normalized_attended);
+        attended + perceptron // "residual connection" 2
     }
 }
 
@@ -407,4 +453,66 @@ mod tests {
         );
     }
 
+    // -- Transformer block tests --
+
+    #[test]
+    fn test_transformer_output_shape() {
+        let vs = nn::VarStore::new(Device::Cpu);
+        let block = Transformer::new(&vs.root());
+        let input = random_embed_input(2, 8);
+        let output = block.forward(&input);
+        // Transformer block preserves shape
+        assert_eq!(output.size(), &[2, 8, EMBEDDING_DIM]);
+    }
+
+    #[test]
+    fn test_transformer_single_token() {
+        let vs = nn::VarStore::new(Device::Cpu);
+        let block = Transformer::new(&vs.root());
+        let input = random_embed_input(1, 1);
+        let output = block.forward(&input);
+        assert_eq!(output.size(), &[1, 1, EMBEDDING_DIM]);
+    }
+
+    #[test]
+    fn test_transformer_causal_masking() {
+        let vs = nn::VarStore::new(Device::Cpu);
+        let block = Transformer::new(&vs.root());
+
+        let input_a = Tensor::randn(&[1, 4, EMBEDDING_DIM], (Float, Device::Cpu));
+        let output_a = block.forward(&input_a);
+
+        // Modify position 3 — earlier positions should be unaffected
+        let input_b = input_a.copy();
+        let noise = Tensor::randn(&[1, 1, EMBEDDING_DIM], (Float, Device::Cpu));
+        input_b.narrow(1, 3, 1).copy_(&noise);
+        let output_b = block.forward(&input_b);
+
+        for pos in 0..3 {
+            let a = output_a.get(0).get(pos);
+            let b = output_b.get(0).get(pos);
+            let diff = (&a - &b).abs().sum(Float);
+            assert!(
+                f64::try_from(&diff).unwrap() < 1e-5,
+                "Position {} changed when only a future token was modified",
+                pos
+            );
+        }
+    }
+
+    #[test]
+    fn test_transformer_residual_passthrough() {
+        // With freshly initialized (near-zero) weights, the residual connections
+        // should mean the output is close to the input
+        let vs = nn::VarStore::new(Device::Cpu);
+        let block = Transformer::new(&vs.root());
+        let input = random_embed_input(1, 4);
+        let output = block.forward(&input);
+        let diff = (&input - &output).abs().mean(Float);
+        // Not exactly equal (weights aren't exactly zero), but should be in the same ballpark
+        assert!(
+            f64::try_from(&diff).unwrap() < 5.0,
+            "With fresh weights, residual connections should keep output near input"
+        );
+    }
 }
