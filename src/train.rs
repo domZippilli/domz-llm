@@ -46,6 +46,9 @@ impl MiniGPTTrainer {
                 .save(&path)
                 .expect("failed to save checkpoint");
             println!("saved checkpoint to {}", path);
+            std::fs::copy(&path, "checkpoints/latest.safetensors")
+                .expect("could not copy checkpoint to latest");
+            println!("saved checkpoint to checkpoints/latest.safetensors");
         }
     }
 
@@ -60,8 +63,7 @@ impl MiniGPTTrainer {
                 if i >= max_batches {
                     println!(
                         "ending epoch {} at batch: {} due to maximum batch threshold",
-                        epoch,
-                        i
+                        epoch, i
                     );
                     break;
                 }

@@ -1,4 +1,5 @@
 use anyhow::Result;
+#[cfg(test)]
 use crate::constants;
 
 #[derive(Debug, Clone)]
@@ -26,6 +27,7 @@ impl Tokenizer {
         Ok(tokens)
     }
 
+    #[cfg(test)]
     pub fn decode(&self, tokens: &[u8]) -> Result<String> {
         let mut text = String::with_capacity(tokens.len());
         for &token in tokens {

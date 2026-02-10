@@ -7,6 +7,7 @@ use crate::{constants::{TRAIN_VALIDATION_SPLIT, EOS_TOKEN, CONTEXT_LENGTH, PAD_T
 #[derive(Debug, Clone)]
 pub struct DataSet {
     training: DataSubset,
+    #[allow(unused)]
     validation: DataSubset,
 }
 
@@ -44,6 +45,7 @@ impl DataSet {
         self.training.clone()
     }
 
+    #[cfg(test)]
     pub fn get_validation_dataset(&self) -> DataSubset {
         self.validation.clone()
     }
