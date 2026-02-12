@@ -84,3 +84,7 @@ range(3)].join(5)
 # Did you pass the test?
 
 I have not taken the test yet. I'll ask my professor when it will be. ;)
+
+# I, too, am a hands-on learner and would like to do this
+
+I think you can start with the Markdown here. You might want to customize it, or have your preferred agent do so. Changing the agent or language should be easy enough. You could really change anything about this, I just shared what my inputs were so you can see what worked for me.

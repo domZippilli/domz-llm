@@ -1,3 +1,7 @@
+# Note from author
+
+This is an example test; it has content specific to my implementation. I would recommend getting through yours to the point it can generate legible content, and then prompt your agent to make a similar test for your implementation.
+
 # Comprehension Test: Building a GPT from Scratch
 
 Answer these questions based on what you learned building this project. The goal isn't to recite code — it's to confirm you could explain these concepts to someone else.
