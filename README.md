@@ -2,7 +2,7 @@
 
 This is a human learning project, performed with the use of AI tools.
 
-I learn best through hands-on building and experimentation. In this project, I worked with Claude Code only as a tutor. The Rust in `src/` is largely written by my hands, standing on the shoulders of giants through the use of PyTorch. The role of Claude was to teach me what I didn't know (or know well) about LLMs and modern NLP machine learning.
+I learn best through hands-on building and experimentation. In this project, I worked with Claude Code only as a tutor. The Rust in `src/` (hidden by the [this](https://github.com/domZippilli/domz-llm/commit/c357910d47c94d7083fcec93bec952f305b3f729) commit for your convenience) is largely written by my hands, standing on the shoulders of giants through the use of PyTorch. The role of Claude was to teach me what I didn't know, or know well, about LLMs and modern NLP machine learning.
 
 Claude provided an architecture and implementation plan for LLM training and inference, which I then implemented. Throughout the process, Claude would answer my questions (Socratically), and write unit tests after I was done to confirm that the code worked as intended. 
 
